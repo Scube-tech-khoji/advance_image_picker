@@ -168,27 +168,6 @@ class _ImageViewerState extends State<ImageViewer>
                       maxHeight: maxHeight,
                       configs: _configs))));
     }
-    if (_configs.stickerFeatureEnabled) {
-      imageEditors[_configs.textImageStickerTitle] = EditorParams(
-          title: _configs.textImageStickerTitle,
-          icon: Icons.insert_emoticon_rounded,
-          onEditorEvent: (
-                  {required BuildContext context,
-                  required File file,
-                  required String title,
-                  int maxWidth = 1080,
-                  int maxHeight = 1920,
-                  int compressQuality = 90,
-                  ImagePickerConfigs? configs}) async =>
-              Navigator.of(context).push(MaterialPageRoute<File>(
-                  fullscreenDialog: true,
-                  builder: (context) => ImageSticker(
-                      file: file,
-                      title: title,
-                      maxWidth: maxWidth,
-                      maxHeight: maxHeight,
-                      configs: _configs))));
-    }
 
     // Add custom image editors
     imageEditors.addAll(_configs.externalImageEditors);
@@ -261,10 +240,15 @@ class _ImageViewerState extends State<ImageViewer>
     return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-            title: Text("${widget.title} (${_currentIndex! + 1} "
-                "/ ${_images.length})"),
-            backgroundColor: _appBarBackgroundColor,
-            foregroundColor: _appBarTextColor,
+            backgroundColor: Theme.of(context).colorScheme.background,
+            centerTitle: true,
+            title: const Text(
+              'PREVIEW',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             actions: [
               GestureDetector(
                 onTap: hasImages
@@ -350,17 +334,6 @@ class _ImageViewerState extends State<ImageViewer>
               onPageChanged: onPageChanged,
             ),
           ),
-          Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _buildCurrentImageInfoView(context)),
-          if (_configs.ocrExtractFunc != null)
-            Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _buildOCRTextView(context)),
         ],
       ),
     );
@@ -446,278 +419,99 @@ class _ImageViewerState extends State<ImageViewer>
         ));
   }
 
-  /// Image viewer for current image.
-  Widget _buildCurrentImageInfoView(BuildContext context) {
-    final image = _images[_currentIndex!];
+  // /// Image viewer for current image.
+  // Widget _buildCurrentImageInfoView(BuildContext context) {
+  //   final image = _images[_currentIndex!];
 
-    Future<ImageObject>? _getImageInfos(ImageObject image) async {
-      // Get image resolution
-      final retImg = await ImageUtils.getImageInfo(image);
+  //   Future<ImageObject>? _getImageInfos(ImageObject image) async {
+  //     // Get image resolution
+  //     final retImg = await ImageUtils.getImageInfo(image);
 
-      // Get detected objects
-      if (_configs.labelDetectFunc != null &&
-          (retImg.recognitions?.isEmpty ?? true)) {
-        final objs = await _configs.labelDetectFunc!.call(retImg.modifiedPath);
-        if (objs.isNotEmpty) retImg.recognitions = objs;
-      }
+  //     // Get detected objects
+  //     if (_configs.labelDetectFunc != null &&
+  //         (retImg.recognitions?.isEmpty ?? true)) {
+  //       final objs = await _configs.labelDetectFunc!.call(retImg.modifiedPath);
+  //       if (objs.isNotEmpty) retImg.recognitions = objs;
+  //     }
 
-      // Get OCR from image
-      if (_configs.ocrExtractFunc != null &&
-          (retImg.ocrText?.isEmpty ?? true)) {
-        final text = await _configs.ocrExtractFunc!.call(retImg.modifiedPath);
-        if (text.isNotEmpty) retImg.ocrText = text;
-      }
-      return retImg;
-    }
+  //     // Get OCR from image
+  //     if (_configs.ocrExtractFunc != null &&
+  //         (retImg.ocrText?.isEmpty ?? true)) {
+  //       final text = await _configs.ocrExtractFunc!.call(retImg.modifiedPath);
+  //       if (text.isNotEmpty) retImg.ocrText = text;
+  //     }
+  //     return retImg;
+  //   }
 
-    return FutureBuilder<ImageObject>(
-        future: _getImageInfos(image),
-        builder: (BuildContext context, AsyncSnapshot<ImageObject> snapshot) {
-          if (snapshot.hasData) {
-            final image = snapshot.data!;
-            return Row(
-              children: [
-                Container(
-                  width: MediaQuery.of(context).size.width,
-                  padding: const EdgeInsets.all(4),
-                  color: Colors.black.withOpacity(0.5),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Display image resolution
-                        Text("${image.modifiedWidth}x${image.modifiedHeight}",
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                        // Display detected labels
-                        if (image.recognitions != null &&
-                            image.recognitions!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Wrap(
-                                children: image.recognitions!.map((e) {
-                              final isSelected = e.label == image.label;
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (image.label != e.label) {
-                                      image.label = e.label;
-                                    } else {
-                                      image.label = "";
-                                    }
-                                  });
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : Colors.grey,
-                                          width: 1),
-                                      borderRadius: const BorderRadius.all(
-                                          Radius.circular(10))),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 2, horizontal: 4),
-                                  margin: const EdgeInsets.symmetric(
-                                      vertical: 2, horizontal: 4),
-                                  child: Text(
-                                      "${e.label}:${e.confidence?.toStringAsFixed(2) ?? ""}",
-                                      style: TextStyle(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : Colors.grey)),
-                                ),
-                              );
-                            }).toList()),
-                          ),
-                      ]),
-                ),
-              ],
-            );
-          } else {
-            return const CupertinoActivityIndicator();
-          }
-        });
-  }
-
-  /// Build widget for displaying OCR informations
-  Widget _buildOCRTextView(BuildContext context) {
-    final image = _images[_currentIndex ?? 0];
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        if (image.ocrText?.isNotEmpty ?? false)
-          GestureDetector(
-            onTap: () async {
-              _textFieldController.text = image.ocrText ?? "";
-              await showDialog<void>(
-                  context: context,
-                  builder: (context) {
-                    return Dialog(
-                      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      child: Stack(
-                        fit: StackFit.passthrough,
-                        children: [
-                          Container(
-                              height:
-                                  MediaQuery.of(context).size.height * 2 / 3,
-                              margin:
-                                  const EdgeInsets.only(top: 40, bottom: 50),
-                              padding: const EdgeInsets.all(12),
-                              child: TextField(
-                                maxLines: null,
-                                controller: _textFieldController,
-                              )),
-                          Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 8, horizontal: 12),
-                                child: Row(children: [
-                                  Text(_configs.textEditText,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18)),
-                                  const Spacer(),
-                                  GestureDetector(
-                                      onTap: () async {
-                                        setState(() {
-                                          _textFieldController.text =
-                                              image.ocrOriginalText ?? "";
-                                        });
-                                      },
-                                      child: const Icon(
-                                          Icons.wifi_protected_setup,
-                                          size: 32,
-                                          color: Colors.blue))
-                                ]),
-                              )),
-                          Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        primary: Colors.black87,
-                                        backgroundColor: Colors.grey.shade200,
-                                        padding: EdgeInsets.zero,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.all(
-                                              Radius.circular(30)),
-                                        ),
-                                      ),
-                                      child: Text(_configs.textClear,
-                                          style: const TextStyle(
-                                              color: Colors.red)),
-                                      onPressed: () {
-                                        setState(() {
-                                          _textFieldController.text = "";
-                                        });
-                                      },
-                                    ),
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        primary: Colors.blue,
-                                        backgroundColor: Colors.blue,
-                                        padding: EdgeInsets.zero,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.all(
-                                              Radius.circular(30)),
-                                        ),
-                                      ),
-                                      child: Text(_configs.textSave,
-                                          style: const TextStyle(
-                                              color: Colors.white)),
-                                      onPressed: () {
-                                        setState(() {
-                                          image.ocrText =
-                                              _textFieldController.text;
-                                          Navigator.pop(context);
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ))
-                        ],
-                      ),
-                    );
-                  });
-            },
-            child: Container(
-                color: Colors.black54,
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(minHeight: 100),
-                child: Text(
-                  image.ocrText ?? "",
-                  style: const TextStyle(color: Colors.grey),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 10,
-                )),
-          )
-        else
-          const SizedBox(height: 100, width: double.infinity),
-        Positioned(
-          bottom: 10,
-          left: 10,
-          child: TextButton(
-            style: TextButton.styleFrom(
-              primary: Colors.blue,
-              backgroundColor: Colors.blue,
-              padding: EdgeInsets.zero,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(30)),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(children: [
-                Text(_configs.textOCR,
-                    style: const TextStyle(color: Colors.white)),
-                if (_isProcessing)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: CupertinoActivityIndicator(),
-                  )
-              ]),
-            ),
-            onPressed: () async {
-              if (image.ocrOriginalText?.isEmpty ?? true) {
-                setState(() {
-                  _isProcessing = true;
-                });
-
-                final text = await _configs.ocrExtractFunc!
-                    .call(image.modifiedPath, isCloudService: true);
-                setState(() {
-                  _isProcessing = false;
-
-                  if (text.isNotEmpty) {
-                    image.ocrText = text;
-                    image.ocrOriginalText = text;
-                  }
-                });
-              } else {
-                setState(() {
-                  image.ocrText = image.ocrOriginalText;
-                });
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
+  //   return FutureBuilder<ImageObject>(
+  //       future: _getImageInfos(image),
+  //       builder: (BuildContext context, AsyncSnapshot<ImageObject> snapshot) {
+  //         if (snapshot.hasData) {
+  //           final image = snapshot.data!;
+  //           return Row(
+  //             children: [
+  //               Container(
+  //                 width: MediaQuery.of(context).size.width,
+  //                 padding: const EdgeInsets.all(4),
+  //                 color: Colors.black.withOpacity(0.5),
+  //                 child: Column(
+  //                     crossAxisAlignment: CrossAxisAlignment.start,
+  //                     children: [
+  //                       // Display image resolution
+  //                       Text("${image.modifiedWidth}x${image.modifiedHeight}",
+  //                           style: const TextStyle(
+  //                               color: Colors.white,
+  //                               fontWeight: FontWeight.bold)),
+  //                       // Display detected labels
+  //                       if (image.recognitions != null &&
+  //                           image.recognitions!.isNotEmpty)
+  //                         Padding(
+  //                           padding: const EdgeInsets.symmetric(vertical: 4),
+  //                           child: Wrap(
+  //                               children: image.recognitions!.map((e) {
+  //                             final isSelected = e.label == image.label;
+  //                             return GestureDetector(
+  //                               onTap: () {
+  //                                 setState(() {
+  //                                   if (image.label != e.label) {
+  //                                     image.label = e.label;
+  //                                   } else {
+  //                                     image.label = "";
+  //                                   }
+  //                                 });
+  //                               },
+  //                               child: Container(
+  //                                 decoration: BoxDecoration(
+  //                                     border: Border.all(
+  //                                         color: isSelected
+  //                                             ? Colors.white
+  //                                             : Colors.grey,
+  //                                         width: 1),
+  //                                     borderRadius: const BorderRadius.all(
+  //                                         Radius.circular(10))),
+  //                                 padding: const EdgeInsets.symmetric(
+  //                                     vertical: 2, horizontal: 4),
+  //                                 margin: const EdgeInsets.symmetric(
+  //                                     vertical: 2, horizontal: 4),
+  //                                 child: Text(
+  //                                     "${e.label}:${e.confidence?.toStringAsFixed(2) ?? ""}",
+  //                                     style: TextStyle(
+  //                                         color: isSelected
+  //                                             ? Colors.white
+  //                                             : Colors.grey)),
+  //                               ),
+  //                             );
+  //                           }).toList()),
+  //                         ),
+  //                     ]),
+  //               ),
+  //             ],
+  //           );
+  //         } else {
+  //           return const CupertinoActivityIndicator();
+  //         }
+  //       });
+  // }
 
   /// Build editor controls.
   Widget _buildEditorControls(
