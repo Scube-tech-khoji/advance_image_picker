@@ -54,25 +54,7 @@ class MyApp extends StatelessWidget {
                     maxWidth: maxWidth,
                     maxHeight: maxHeight,
                     configs: configs))));
-    configs.externalImageEditors['external_image_editor_2'] = EditorParams(
-        title: 'external_image_editor_2',
-        icon: Icons.edit_attributes,
-        onEditorEvent: (
-                {required BuildContext context,
-                required File file,
-                required String title,
-                int maxWidth = 1080,
-                int maxHeight = 1920,
-                int compressQuality = 90,
-                ImagePickerConfigs? configs}) async =>
-            Navigator.of(context).push(MaterialPageRoute(
-                fullscreenDialog: true,
-                builder: (context) => ImageSticker(
-                    file: file,
-                    title: title,
-                    maxWidth: maxWidth,
-                    maxHeight: maxHeight,
-                    configs: configs))));
+
 
     // Example about label detection & OCR extraction feature.
     // You can use Google ML Kit or TensorflowLite for this purpose

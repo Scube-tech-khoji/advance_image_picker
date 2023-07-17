@@ -117,7 +117,7 @@ class _ImageStickerState extends State<ImageSticker>
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text('Preview'),
         backgroundColor: _appBarBackgroundColor,
         foregroundColor: _appBarTextColor,
         actions: <Widget>[_buildDoneButton(context)],
@@ -141,19 +141,9 @@ class _ImageStickerState extends State<ImageSticker>
                       })
                   : _buildImageStack(context),
             ),
-            _buildStickerList(context)
+            // _buildStickerList(context)
           ],
         ),
-        Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Center(
-                child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(_configs.textImageStickerGuide,
-                  style: const TextStyle(color: Colors.white)),
-            ))),
         Positioned(
             bottom: 120,
             left: 0,

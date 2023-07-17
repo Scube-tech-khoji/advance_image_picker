@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -474,67 +475,366 @@ class _ImagePickerState extends State<ImagePicker>
     final Color _appBarDoneButtonColor =
         _configs.appBarDoneButtonColor ?? _appBarBackgroundColor;
 
+    final isMaxCount = _selectedImages.length >= widget.maxCount;
+
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: _configs.backgroundColor,
-          appBar: AppBar(
-            title: _buildAppBarTitle(
-              context,
-              _appBarBackgroundColor,
-              _appBarTextColor,
-            ),
-            backgroundColor: _appBarBackgroundColor,
-            foregroundColor: _appBarTextColor,
-            centerTitle: false,
-            actions: <Widget>[
-              _buildDoneButton(context, _appBarDoneButtonColor),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.4),
+                blurRadius: 15,
+              ),
             ],
           ),
-          body: SafeArea(child: _buildBodyView(context))),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(25),
+              topRight: Radius.circular(25),
+            ),
+            child: BottomAppBar(
+              shape: const CircularNotchedRectangle(),
+              notchMargin: 10,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: MediaQuery.of(context).platformBrightness ==
+                          Brightness.dark
+                      ? Theme.of(context).backgroundColor
+                      : const Color(0xffffffff),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.9),
+                      spreadRadius: 110,
+                      blurRadius: 4,
+                      offset: const Offset(0, 1), // changes position of shadow
+                    ),
+                  ],
+                ),
+                height: 60,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: MaterialButton(
+                        minWidth: 40,
+                        onPressed: () async {
+                          // (_albums.isEmpty || !_isGalleryPermissionOK)) {
+                          await _initPhotoGallery();
+                          setState(() {
+                            _mode = 1;
+                          });
+                        },
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(
+                              Icons.image_search_sharp,
+                              // color: currentTab == 0
+                              //     ? Theme.of(context).colorScheme.primary
+                              //     : const Color(0xff666666),
+                            ),
+                            FittedBox(
+                              fit: BoxFit.fitWidth,
+                              child: Text(
+                                'Upload Image',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  // color: currentTab == 0
+                                  //     ? Theme.of(context).colorScheme.primary
+                                  //     : const Color(0xff666666),
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: MaterialButton(
+                        minWidth: 40,
+                        onPressed: () {
+                          setState(() {
+                            _selectedImages.removeAt(0);
+                          });
+                          _currentAlbumKey.currentState
+                              ?.updateStateFromExternal(
+                                  selectedImages: _selectedImages);
+                        },
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.replay
+                                // color: currentTab == 1
+                                //     ? Theme.of(context).colorScheme.primary
+                                //     : const Color(0xff666666),
+                                ),
+                            FittedBox(
+                              fit: BoxFit.fitWidth,
+                              child: Text(
+                                'Retake Image',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  // color: currentTab == 1
+                                  //     ? Theme.of(context).colorScheme.primary
+                                  //     : const Color(0xff666666),
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButton: GestureDetector(
+          onTapDown: !isMaxCount
+              ? (td) {
+                  setState(() {
+                    _isCapturing = true;
+                  });
+                }
+              : null,
+          onTapUp: !isMaxCount
+              ? (td) {
+                  setState(() {
+                    _isCapturing = false;
+                  });
+                }
+              : null,
+          onTap: (!isMaxCount && !(_controller?.value.isTakingPicture ?? true))
+              ? () async {
+                  if (_mode == 1) {
+                    setState(() {
+                      _mode = 0;
+                    });
+                  } else {
+                    // Ensure that the camera is initialized.
+                    await _initializeControllerFuture;
+
+                    if (!(_controller?.value.isTakingPicture ?? true)) {
+                      try {
+                        // Scroll to end of list.
+                        await _scrollController.animateTo(
+                          ((_selectedImages.length - 1) * _configs.thumbWidth)
+                              .toDouble(),
+                          duration: const Duration(seconds: 1),
+                          curve: Curves.fastOutSlowIn,
+                        );
+
+                        // Take new picture.
+                        final file = await _controller!.takePicture();
+
+                        Map<String, dynamic>? croppingParams;
+                        if (!_isFullscreenImage) {
+                          croppingParams = <String, dynamic>{};
+                          if (mounted) {
+                            final size = MediaQuery.of(context).size;
+                            croppingParams["originX"] = 0;
+                            croppingParams["originY"] = 0;
+                            croppingParams["widthPercent"] = 1.0;
+                            if (_configs.cameraPickerModeEnabled &&
+                                _configs.albumPickerModeEnabled) {
+                              croppingParams["heightPercent"] =
+                                  (size.height - kBottomControlPanelHeight) /
+                                      size.height;
+                            } else {
+                              croppingParams["heightPercent"] = (size.height -
+                                      kBottomControlPanelHeight +
+                                      32) /
+                                  size.height;
+                            }
+                          }
+                        }
+                        final capturedFile = await _imagePreProcessing(
+                            file.path,
+                            croppingParams: croppingParams);
+
+                        setState(() {
+                          _selectedImages.add(ImageObject(
+                              originalPath: capturedFile.path,
+                              modifiedPath: capturedFile.path));
+                        });
+                      } on CameraException catch (e) {
+                        // LogUtils.log('${e.description}');
+                      }
+                    }
+                  }
+                }
+              : null,
+          child: Container(
+            height: 60,
+            width: 60,
+            decoration: BoxDecoration(
+              color:
+                  MediaQuery.of(context).platformBrightness == Brightness.dark
+                      ? const Color(0xffE5E5E5)
+                      : const Color(0xff1A1A1A),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.camera_alt_outlined,
+              color:
+                  MediaQuery.of(context).platformBrightness == Brightness.dark
+                      ? const Color(0xff000000)
+                      : const Color(0xffFFFFFF),
+              size: (30 + (_isCapturing ? (-10) : 0)).toDouble(),
+            ),
+          ),
+        ),
+
+        // FloatingActionButton(
+        //   backgroundColor:
+        // MediaQuery.of(context).platformBrightness == Brightness.dark
+        //     ? const Color(0xffE5E5E5)
+        //     : const Color(0xff1A1A1A),
+        //   shape: const RoundedRectangleBorder(
+        //     borderRadius: BorderRadius.all(
+        //       Radius.circular(50.0),
+        //     ),
+        //   ),
+        //   onPressed: () {
+        //     final isMaxCount = _selectedImages.length >= widget.maxCount;
+        //     (!isMaxCount && !(_controller?.value.isTakingPicture ?? true))
+        //         ? () async {
+        //             LogUtils.log("[_buildCameraControls] capture pressed");
+
+        //             // Ensure that the camera is initialized.
+        //             await _initializeControllerFuture;
+
+        //             if (!(_controller?.value.isTakingPicture ?? true)) {
+        //               try {
+        //                 // Scroll to end of list.
+        //                 await _scrollController.animateTo(
+        //                   ((_selectedImages.length - 1) * _configs.thumbWidth)
+        //                       .toDouble(),
+        //                   duration: const Duration(seconds: 1),
+        //                   curve: Curves.fastOutSlowIn,
+        //                 );
+
+        //                 // Take new picture.
+        //                 final file = await _controller!.takePicture();
+        //                 LogUtils.log("[_buildCameraControls] takePicture done");
+
+        //                 Map<String, dynamic>? croppingParams;
+        //                 if (!_isFullscreenImage) {
+        //                   croppingParams = <String, dynamic>{};
+        //                   if (mounted) {
+        //                     final size = MediaQuery.of(context).size;
+        //                     croppingParams["originX"] = 0;
+        //                     croppingParams["originY"] = 0;
+        //                     croppingParams["widthPercent"] = 1.0;
+        //                     if (_configs.cameraPickerModeEnabled &&
+        //                         _configs.albumPickerModeEnabled) {
+        //                       croppingParams["heightPercent"] =
+        //                           (size.height - kBottomControlPanelHeight) /
+        //                               size.height;
+        //                     } else {
+        //                       croppingParams["heightPercent"] = (size.height -
+        //                               kBottomControlPanelHeight +
+        //                               32) /
+        //                           size.height;
+        //                     }
+        //                   }
+        //                 }
+        //                 final capturedFile = await _imagePreProcessing(
+        //                     file.path,
+        //                     croppingParams: croppingParams);
+
+        //                 setState(() {
+        //                   LogUtils.log("[_buildCameraControls] update image "
+        //                       "list after capturing");
+        //                   _selectedImages.add(ImageObject(
+        //                       originalPath: capturedFile.path,
+        //                       modifiedPath: capturedFile.path));
+        //                 });
+        //               } on CameraException catch (e) {
+        //                 LogUtils.log('${e.description}');
+        //               }
+        //             }
+        //           }
+        //         : null;
+        //   },
+        //   child: Icon(
+        //     Icons.camera_alt_outlined,
+        //     color: Theme.of(context).backgroundColor,
+        //   ),
+        // ),
+        extendBodyBehindAppBar: true,
+        key: _scaffoldKey,
+        // backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          elevation: 0,
+          title: _buildAppBarTitle(
+            context,
+            _appBarTextColor,
+          ),
+          // backgroundColor: _appBarBackgroundColor,
+          // foregroundColor: _appBarTextColor,
+          backgroundColor: Colors.transparent,
+
+          centerTitle: true,
+          actions: <Widget>[
+            _buildDoneButton(context, _appBarDoneButtonColor),
+          ],
+        ),
+        body: SafeArea(
+          child: _buildBodyView(context),
+        ),
+      ),
     );
   }
 
   /// Build app bar title
   Widget _buildAppBarTitle(
     BuildContext context,
-    Color appBarBackgroundColor,
     Color appBarTextColor,
   ) {
     return GestureDetector(
-        onTap: (_mode == PickerMode.Album)
-            ? () {
-                Navigator.of(context, rootNavigator: true)
-                    .push<void>(PageRouteBuilder(
-                        pageBuilder: (context, animation, __) {
-                          return Scaffold(
-                              appBar: AppBar(
-                                  title: _buildAlbumSelectButton(context,
-                                      isPop: true),
-                                  backgroundColor: appBarBackgroundColor,
-                                  foregroundColor: appBarTextColor,
-                                  centerTitle: false),
-                              body: Material(
-                                  color: Colors.black,
-                                  child: SafeArea(
-                                    child: _buildAlbumList(_albums, context,
-                                        (val) {
-                                      Navigator.of(context).pop();
-                                      setState(() {
-                                        _currentAlbum = val;
-                                      });
-                                      _currentAlbumKey.currentState
-                                          ?.updateStateFromExternal(
-                                              album: _currentAlbum);
-                                    }),
-                                  )));
-                        },
-                        fullscreenDialog: true));
-              }
-            : null,
-        child: _buildAlbumSelectButton(context,
-            isCameraMode: _mode == PickerMode.Camera));
+      onTap: (_mode == PickerMode.Album)
+          ? () {
+              Navigator.of(context, rootNavigator: true).push<void>(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, __) {
+                    return Scaffold(
+                      appBar: AppBar(
+                        title: _buildAlbumSelectButton(context, isPop: true),
+                        backgroundColor:
+                            Theme.of(context).colorScheme.background,
+                        centerTitle: true,
+                      ),
+                      body: Material(
+                        // color: Colors.black,
+                        child: SafeArea(
+                          child: _buildAlbumList(_albums, context, (val) {
+                            Navigator.of(context).pop();
+                            setState(() {
+                              _currentAlbum = val;
+                            });
+                            _currentAlbumKey.currentState
+                                ?.updateStateFromExternal(album: _currentAlbum);
+                          }),
+                        ),
+                      ),
+                    );
+                  },
+                  fullscreenDialog: true,
+                ),
+              );
+            }
+          : null,
+      child: _buildAlbumSelectButton(
+        context,
+        isCameraMode: _mode == PickerMode.Camera,
+      ),
+    );
   }
 
   /// Function used to select the images and close the image picker.
@@ -563,12 +863,6 @@ class _ImagePickerState extends State<ImagePicker>
     Navigator.of(context).pop(_selectedImages);
   }
 
-  // TODO(rydmike): The image picker uses a lot of Widget build functions.
-  //   This may sometimes be inefficient and even an anti-pattern in Flutter.
-  //   It is not always a bad thing though. Still we should review it later
-  //   and see if there are critical ones that it would be better to replace
-  //   with StatelessWidgets or StatefulWidgets.
-
   /// Build done button.
   Widget _buildDoneButton(BuildContext context, Color buttonColor) {
     if (_selectedImages.isEmpty &&
@@ -583,24 +877,30 @@ class _ImagePickerState extends State<ImagePicker>
             child: OutlinedButton(
               onPressed: (_selectedImages.isNotEmpty)
                   ? () async {
+                      // var searchProvider = await Provider.of<SearchProvider>(
+                      //     context,
+                      //     listen: false);
                       await _doneButtonPressed();
+                      debugPrint(
+                        _selectedImages[0].originalPath,
+                      );
+
+                      // searchProvider.getImageSearchDetail(
+                      //   File(
+                      //     _selectedImages[0].originalPath,
+                      //   ),
+                      // );
                     }
                   : null,
               style: ButtonStyle(
                 elevation: MaterialStateProperty.all(5),
-                backgroundColor: MaterialStateProperty.all(
-                    _selectedImages.isNotEmpty ? buttonColor : Colors.grey),
-                shape: MaterialStateProperty.all(RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10))),
+                // backgroundColor: MaterialStateProperty.all(
+                //     _selectedImages.isNotEmpty ? buttonColor : Colors.grey),
+                // shape: MaterialStateProperty.all(RoundedRectangleBorder(
+                //     borderRadius: BorderRadius.circular(10))),
               ),
               child: Row(children: [
-                Text(_configs.textSelectButtonTitle,
-                    style: TextStyle(
-                        color: _selectedImages.isNotEmpty
-                            ? ((buttonColor == Colors.white)
-                                ? Colors.black
-                                : Colors.white)
-                            : Colors.black)),
+                const Text('Search'),
                 if (_isOutputCreating)
                   const Padding(
                     padding: EdgeInsets.all(4),
@@ -642,61 +942,19 @@ class _ImagePickerState extends State<ImagePicker>
             ? _buildAlbumPreview(context)
             : _builGalleryRequestPermissionView(context),
       if (_mode == PickerMode.Camera) ...[
-        Positioned(
-            bottom: bottomHeight.toDouble(),
-            left: 5,
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _exposureModeControlRowWidget(),
-              _buildExposureButton(context),
-            ])),
-        Positioned(
-            bottom: bottomHeight.toDouble(),
-            left: 0,
-            right: 0,
-            child: Center(child: _buildZoomRatioButton(context))),
-        Positioned(
-            bottom: bottomHeight.toDouble(),
-            right: 5,
-            child: _buildImageFullOption(context))
+        // Positioned(
+        //     bottom: bottomHeight.toDouble(),
+        //     left: 0,
+        //     right: 0,
+        //     child: Center(child: _buildZoomRatioButton(context))),
+        // Positioned(
+        //     bottom: bottomHeight.toDouble(),
+        //     right: 5,
+        //     child: _buildImageFullOption(context))
       ],
       Positioned(
           bottom: 0, left: 0, right: 0, child: _buildBottomPanel(context))
     ]);
-  }
-
-  /// Build zoom ratio button.
-  Widget _buildZoomRatioButton(BuildContext context) {
-    return TextButton(
-        style: TextButton.styleFrom(
-          primary: Colors.black12,
-          minimumSize: const Size(88, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: const CircleBorder(),
-        ),
-        onPressed: null,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Text("${_currentScale.toStringAsFixed(1)}x",
-                style: const TextStyle(color: Colors.white)),
-          ),
-        ));
-  }
-
-  /// Build exposure adjusting button.
-  Widget _buildExposureButton(BuildContext context) {
-    return TextButton(
-      style: TextButton.styleFrom(
-        primary: Colors.black12,
-        minimumSize: const Size(88, 36),
-        padding: const EdgeInsets.all(4),
-        shape: const CircleBorder(),
-      ),
-      onPressed: _controller != null ? _onExposureModeButtonPressed : null,
-      child: const Icon(Icons.exposure, color: Colors.white, size: 40),
-    );
   }
 
   /// Exposure change mode button event.
@@ -708,28 +966,28 @@ class _ImagePickerState extends State<ImagePicker>
     }
   }
 
-  /// Build image full option.
-  Widget _buildImageFullOption(BuildContext context) {
-    return TextButton(
-      style: TextButton.styleFrom(
-        primary: Colors.black12,
-        minimumSize: const Size(88, 36),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: const CircleBorder(),
-      ),
-      onPressed: () {
-        setState(() {
-          _isFullscreenImage = !_isFullscreenImage;
-        });
-      },
-      child: Icon(
-          _isFullscreenImage
-              ? Icons.fullscreen_exit_rounded
-              : Icons.fullscreen_rounded,
-          color: Colors.white,
-          size: 48),
-    );
-  }
+  // /// Build image full option.
+  // Widget _buildImageFullOption(BuildContext context) {
+  //   return TextButton(
+  //     style: TextButton.styleFrom(
+  //       primary: Colors.black12,
+  //       minimumSize: const Size(88, 36),
+  //       padding: const EdgeInsets.symmetric(horizontal: 16),
+  //       shape: const CircleBorder(),
+  //     ),
+  //     onPressed: () {
+  //       setState(() {
+  //         _isFullscreenImage = !_isFullscreenImage;
+  //       });
+  //     },
+  //     child: Icon(
+  //         _isFullscreenImage
+  //             ? Icons.fullscreen_exit_rounded
+  //             : Icons.fullscreen_rounded,
+  //         color: Colors.white,
+  //         size: 48),
+  //   );
+  // }
 
   /// Build bottom panel.
   Widget _buildBottomPanel(BuildContext context) {
@@ -740,10 +998,10 @@ class _ImagePickerState extends State<ImagePicker>
             ? _configs.textSelectedImagesTitle
             : '${_configs.textSelectedImagesTitle}: ';
     return Container(
-      color: ((_mode == PickerMode.Camera) && _isFullscreenImage)
-          ? _configs.bottomPanelColorInFullscreen
-          : _configs.bottomPanelColor,
-      padding: const EdgeInsets.all(8),
+      // color: ((_mode == PickerMode.Camera) && _isFullscreenImage)
+      //     ? _configs.bottomPanelColorInFullscreen
+      //     : _configs.bottomPanelColor,
+      // padding: const EdgeInsets.all(8),s
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         if (widget.maxCount > 1) ...[
           Text(
@@ -755,11 +1013,17 @@ class _ImagePickerState extends State<ImagePicker>
             Text(_configs.textSelectedImagesGuide,
                 style: const TextStyle(color: Colors.grey, fontSize: 14))
         ],
-        _buildReorderableSelectedImageList(context),
-        _buildCameraControls(context),
-        Padding(
-            padding: const EdgeInsets.all(8),
-            child: _buildPickerModeList(context))
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            //! TODO: Change the selected image edit
+            _mode == 0
+                ? _buildReorderableSelectedImageList(context)
+                : const SizedBox(),
+            _buildCameraControls(context),
+          ],
+        ),
+        _buildPickerModeList(context)
       ]),
     );
   }
@@ -768,8 +1032,13 @@ class _ImagePickerState extends State<ImagePicker>
   Widget _buildAlbumSelectButton(BuildContext context,
       {bool isPop = false, bool isCameraMode = false}) {
     if (isCameraMode) {
-      return Text(_configs.textCameraTitle,
-          style: TextStyle(color: _configs.appBarTextColor, fontSize: 16));
+      return Text(
+        'CAMERA',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      );
     }
 
     final size = MediaQuery.of(context).size;
@@ -971,20 +1240,25 @@ class _ImagePickerState extends State<ImagePicker>
 
                 final idx = _selectedImages
                     .indexWhere((element) => element.assetId == image.assetId);
-                setState(() {
-                  if (idx >= 0) {
-                    _selectedImages.removeAt(idx);
-                  } else {
-                    _scrollController.animateTo(
-                      ((_selectedImages.length - 1) * _configs.thumbWidth)
-                          .toDouble(),
-                      duration: const Duration(seconds: 1),
-                      curve: Curves.fastOutSlowIn,
-                    );
-                    _selectedImages.add(image);
-                  }
-                });
-              })
+                setState(
+                  () {
+                    if (idx >= 0) {
+                      _selectedImages.removeAt(idx);
+                    } else {
+                      if (_scrollController.hasClients) {
+                        _scrollController.animateTo(
+                          ((_selectedImages.length - 1) * _configs.thumbWidth)
+                              .toDouble(),
+                          duration: const Duration(seconds: 1),
+                          curve: Curves.fastOutSlowIn,
+                        );
+                      }
+                      _selectedImages.add(image);
+                    }
+                  },
+                );
+              },
+            )
           : const SizedBox(),
     );
   }
@@ -1153,6 +1427,7 @@ class _ImagePickerState extends State<ImagePicker>
     }
 
     return Container(
+        alignment: Alignment.bottomRight,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         height: (_configs.thumbHeight + 8).toDouble(),
         child: Theme(
@@ -1208,16 +1483,17 @@ class _ImagePickerState extends State<ImagePicker>
                         key: ValueKey(i.toString()),
                         width: _configs.thumbWidth.toDouble(),
                         height: _configs.thumbHeight.toDouble(),
-                        margin: const EdgeInsets.all(4),
+                        // margin: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.grey,
+                          color: Color.fromARGB(255, 231, 231, 231),
                           border: Border.all(
-                              color: (i == _selectedImages.length)
-                                  ? Colors.blue
-                                  : Colors.white,
-                              width: 3),
+                            // color: (i == _selectedImages.length)
+                            //     ? Colors.blue
+                            //     : Colors.white,
+                            width: 1,
+                          ),
                           borderRadius:
-                              const BorderRadius.all(Radius.circular(10)),
+                              const BorderRadius.all(Radius.circular(6.0)),
                         ))
               ]),
         ));
@@ -1269,140 +1545,95 @@ class _ImagePickerState extends State<ImagePicker>
     return _mode == PickerMode.Camera
         ? Container(
             height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (_configs.showFlashMode)
-                    GestureDetector(
-                      child: Icon(_flashModeIcon(_flashMode),
-                          size: 32, color: Colors.white),
-                      onTap: () async {
-                        // Ensure that the camera is initialized.
-                        await _initializeControllerFuture;
-                        // Cycle to next flash mode.
-                        _cycleFlashMode();
-                        // Update camera to new flash mode.
-                        await _controller!
-                            .setFlashMode(_flashMode)
-                            .then((value) => setState(() {}));
-                      },
-                    )
-                  else
-                    // We use a transparent icon with no tap, to make
-                    // it take up same space as when it is there, to ensure
-                    // identical layout as when it is shown.
-                    Icon(_flashModeIcon(_flashMode),
-                        size: 32, color: Colors.transparent),
-                  GestureDetector(
-                    onTapDown: !isMaxCount
-                        ? (td) {
-                            setState(() {
-                              _isCapturing = true;
-                            });
-                          }
-                        : null,
-                    onTapUp: !isMaxCount
-                        ? (td) {
-                            setState(() {
-                              _isCapturing = false;
-                            });
-                          }
-                        : null,
-                    onTap: (!isMaxCount &&
-                            !(_controller?.value.isTakingPicture ?? true))
-                        ? () async {
-                            LogUtils.log(
-                                "[_buildCameraControls] capture pressed");
+                  // GestureDetector(
+                  //   onTapDown: !isMaxCount
+                  //       ? (td) {
+                  //           setState(() {
+                  //             _isCapturing = true;
+                  //           });
+                  //         }
+                  //       : null,
+                  //   onTapUp: !isMaxCount
+                  //       ? (td) {
+                  //           setState(() {
+                  //             _isCapturing = false;
+                  //           });
+                  //         }
+                  //       : null,
+                  //   onTap: (!isMaxCount &&
+                  //           !(_controller?.value.isTakingPicture ?? true))
+                  //       ? () async {
+                  //           LogUtils.log(
+                  //               "[_buildCameraControls] capture pressed");
 
-                            // Ensure that the camera is initialized.
-                            await _initializeControllerFuture;
+                  //           // Ensure that the camera is initialized.
+                  //           await _initializeControllerFuture;
 
-                            if (!(_controller?.value.isTakingPicture ?? true)) {
-                              try {
-                                // Scroll to end of list.
-                                await _scrollController.animateTo(
-                                  ((_selectedImages.length - 1) *
-                                          _configs.thumbWidth)
-                                      .toDouble(),
-                                  duration: const Duration(seconds: 1),
-                                  curve: Curves.fastOutSlowIn,
-                                );
+                  //           if (!(_controller?.value.isTakingPicture ?? true)) {
+                  //             try {
+                  //               // Scroll to end of list.
+                  //               await _scrollController.animateTo(
+                  //                 ((_selectedImages.length - 1) *
+                  //                         _configs.thumbWidth)
+                  //                     .toDouble(),
+                  //                 duration: const Duration(seconds: 1),
+                  //                 curve: Curves.fastOutSlowIn,
+                  //               );
 
-                                // Take new picture.
-                                final file = await _controller!.takePicture();
-                                LogUtils.log(
-                                    "[_buildCameraControls] takePicture done");
+                  //               // Take new picture.
+                  //               final file = await _controller!.takePicture();
+                  //               LogUtils.log(
+                  //                   "[_buildCameraControls] takePicture done");
 
-                                Map<String, dynamic>? croppingParams;
-                                if (!_isFullscreenImage) {
-                                  croppingParams = <String, dynamic>{};
-                                  if (mounted) {
-                                    final size = MediaQuery.of(context).size;
-                                    croppingParams["originX"] = 0;
-                                    croppingParams["originY"] = 0;
-                                    croppingParams["widthPercent"] = 1.0;
-                                    if (_configs.cameraPickerModeEnabled &&
-                                        _configs.albumPickerModeEnabled) {
-                                      croppingParams["heightPercent"] =
-                                          (size.height -
-                                                  kBottomControlPanelHeight) /
-                                              size.height;
-                                    } else {
-                                      croppingParams["heightPercent"] =
-                                          (size.height -
-                                                  kBottomControlPanelHeight +
-                                                  32) /
-                                              size.height;
-                                    }
-                                  }
-                                }
-                                final capturedFile = await _imagePreProcessing(
-                                    file.path,
-                                    croppingParams: croppingParams);
+                  //               Map<String, dynamic>? croppingParams;
+                  //               if (!_isFullscreenImage) {
+                  //                 croppingParams = <String, dynamic>{};
+                  //                 if (mounted) {
+                  //                   final size = MediaQuery.of(context).size;
+                  //                   croppingParams["originX"] = 0;
+                  //                   croppingParams["originY"] = 0;
+                  //                   croppingParams["widthPercent"] = 1.0;
+                  //                   if (_configs.cameraPickerModeEnabled &&
+                  //                       _configs.albumPickerModeEnabled) {
+                  //                     croppingParams["heightPercent"] =
+                  //                         (size.height -
+                  //                                 kBottomControlPanelHeight) /
+                  //                             size.height;
+                  //                   } else {
+                  //                     croppingParams["heightPercent"] =
+                  //                         (size.height -
+                  //                                 kBottomControlPanelHeight +
+                  //                                 32) /
+                  //                             size.height;
+                  //                   }
+                  //                 }
+                  //               }
+                  //               final capturedFile = await _imagePreProcessing(
+                  //                   file.path,
+                  //                   croppingParams: croppingParams);
 
-                                setState(() {
-                                  LogUtils.log(
-                                      "[_buildCameraControls] update image "
-                                      "list after capturing");
-                                  _selectedImages.add(ImageObject(
-                                      originalPath: capturedFile.path,
-                                      modifiedPath: capturedFile.path));
-                                });
-                              } on CameraException catch (e) {
-                                LogUtils.log('${e.description}');
-                              }
-                            }
-                          }
-                        : null,
-                    child: Icon(Icons.camera,
-                        size: (64 + (_isCapturing ? (-10) : 0)).toDouble(),
-                        color: !isMaxCount ? Colors.white : Colors.grey),
-                  ),
-                  GestureDetector(
-                    onTap: canSwitchCamera && _configs.showLensDirection
-                        ? () async {
-                            final lensDirection =
-                                _controller!.description.lensDirection;
-                            final CameraDescription? newDescription =
-                                _getCamera(
-                                    _cameras,
-                                    lensDirection == CameraLensDirection.front
-                                        ? CameraLensDirection.back
-                                        : CameraLensDirection.front);
-                            if (newDescription != null) {
-                              LogUtils.log("Start new camera: "
-                                  "${newDescription.toString()}");
-                              await _onNewCameraSelected(newDescription);
-                            }
-                          }
-                        : null,
-                    child: Icon(Icons.switch_camera,
-                        size: 32,
-                        color: _configs.showLensDirection
-                            ? (canSwitchCamera ? Colors.white : Colors.grey)
-                            : Colors.transparent),
-                  )
+                  //               setState(() {
+                  //                 LogUtils.log(
+                  //                     "[_buildCameraControls] update image "
+                  //                     "list after capturing");
+                  //                 _selectedImages.add(ImageObject(
+                  //                     originalPath: capturedFile.path,
+                  //                     modifiedPath: capturedFile.path));
+                  //               });
+                  //             } on CameraException catch (e) {
+                  //               LogUtils.log('${e.description}');
+                  //             }
+                  //           }
+                  //         }
+                  //       : null,
+                  //   child: Icon(Icons.camera,
+                  //       size: (64 + (_isCapturing ? (-10) : 0)).toDouble(),
+                  //       color: !isMaxCount ? Colors.white : Colors.grey),
+                  // ),
                 ]),
           )
         : const SizedBox();
@@ -1411,41 +1642,43 @@ class _ImagePickerState extends State<ImagePicker>
   /// Build picker mode list.
   Widget _buildPickerModeList(BuildContext context) {
     if (_configs.albumPickerModeEnabled && _configs.cameraPickerModeEnabled) {
-      return CupertinoSlidingSegmentedControl(
-          backgroundColor: Colors.transparent,
-          thumbColor: Colors.transparent,
-          children: {
-            0: Text(_configs.textCameraTitle,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: (_mode == PickerMode.Camera)
-                        ? Colors.white
-                        : Colors.grey)),
-            1: Text(_configs.textAlbumTitle,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: (_mode == PickerMode.Album)
-                        ? Colors.white
-                        : Colors.grey)),
-          },
-          groupValue: _mode,
-          onValueChanged: (dynamic val) async {
-            if (_mode != val) {
-              if (val == PickerMode.Camera &&
-                  (_cameras.isEmpty || !_isCameraPermissionOK)) {
-                await _initPhotoCapture();
-              } else if (val == PickerMode.Album &&
-                  (_albums.isEmpty || !_isGalleryPermissionOK)) {
-                await _initPhotoGallery();
-              }
+      // return
 
-              setState(() {
-                _mode = val as int;
-              });
-            }
-          });
+      // CupertinoSlidingSegmentedControl(
+      //     backgroundColor: Colors.transparent,
+      //     thumbColor: Colors.transparent,
+      //     children: {
+      //       0: Text(_configs.textCameraTitle,
+      //           style: TextStyle(
+      //               fontSize: 18,
+      //               fontWeight: FontWeight.bold,
+      //               color: (_mode == PickerMode.Camera)
+      //                   ? Colors.white
+      //                   : Colors.grey)),
+      //       1: Text(_configs.textAlbumTitle,
+      //           style: TextStyle(
+      //               fontSize: 18,
+      //               fontWeight: FontWeight.bold,
+      //               color: (_mode == PickerMode.Album)
+      //                   ? Colors.white
+      //                   : Colors.grey)),
+      //     },
+      //     groupValue: _mode,
+      //     onValueChanged: (dynamic val) async {
+      //       if (_mode != val) {
+      //         if (val == PickerMode.Camera &&
+      //             (_cameras.isEmpty || !_isCameraPermissionOK)) {
+      //           await _initPhotoCapture();
+      //         } else if (val == PickerMode.Album &&
+      //   (_albums.isEmpty || !_isGalleryPermissionOK)) {
+      // await _initPhotoGallery();
+      //         }
+
+      // setState(() {
+      //   _mode = val as int;
+      // });
+      //       }
+      //     });
     }
     return const SizedBox();
   }
