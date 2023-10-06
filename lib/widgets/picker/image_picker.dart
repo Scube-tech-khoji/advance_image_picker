@@ -47,7 +47,7 @@ class ImagePicker extends StatefulWidget {
   const ImagePicker(
       {final Key? key,
       this.maxCount = 10,
-      this.isFullscreenImage = false,
+      this.isFullscreenImage = true,
       this.isCaptureFirst = true,
       this.configs})
       : super(key: key);
@@ -480,6 +480,7 @@ class _ImagePickerState extends State<ImagePicker>
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             boxShadow: <BoxShadow>[
@@ -499,10 +500,7 @@ class _ImagePickerState extends State<ImagePicker>
               notchMargin: 10,
               child: Container(
                 decoration: BoxDecoration(
-                  color: MediaQuery.of(context).platformBrightness ==
-                          Brightness.dark
-                      ? Theme.of(context).backgroundColor
-                      : const Color(0xffffffff),
+                  color: Theme.of(context).colorScheme.background,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.9),
@@ -673,18 +671,12 @@ class _ImagePickerState extends State<ImagePicker>
             height: 60,
             width: 60,
             decoration: BoxDecoration(
-              color:
-                  MediaQuery.of(context).platformBrightness == Brightness.dark
-                      ? const Color(0xffE5E5E5)
-                      : const Color(0xff1A1A1A),
+              color: Colors.black,
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.camera_alt_outlined,
-              color:
-                  MediaQuery.of(context).platformBrightness == Brightness.dark
-                      ? const Color(0xff000000)
-                      : const Color(0xffFFFFFF),
+              color: const Color(0xffFFFFFF),
               size: (30 + (_isCapturing ? (-10) : 0)).toDouble(),
             ),
           ),
@@ -771,6 +763,11 @@ class _ImagePickerState extends State<ImagePicker>
         key: _scaffoldKey,
         // backgroundColor: Colors.transparent,
         appBar: AppBar(
+          iconTheme: IconThemeData(
+            color: Theme.of(context)
+                .colorScheme
+                .inverseSurface, //change your color here
+          ),
           elevation: 0,
           title: _buildAppBarTitle(
             context,
@@ -797,44 +794,48 @@ class _ImagePickerState extends State<ImagePicker>
     BuildContext context,
     Color appBarTextColor,
   ) {
-    return GestureDetector(
-      onTap: (_mode == PickerMode.Album)
-          ? () {
-              Navigator.of(context, rootNavigator: true).push<void>(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, __) {
-                    return Scaffold(
-                      appBar: AppBar(
-                        title: _buildAlbumSelectButton(context, isPop: true),
-                        backgroundColor:
-                            Theme.of(context).colorScheme.background,
-                        centerTitle: true,
-                      ),
-                      body: Material(
-                        // color: Colors.black,
-                        child: SafeArea(
-                          child: _buildAlbumList(_albums, context, (val) {
-                            Navigator.of(context).pop();
-                            setState(() {
-                              _currentAlbum = val;
-                            });
-                            _currentAlbumKey.currentState
-                                ?.updateStateFromExternal(album: _currentAlbum);
-                          }),
-                        ),
+    return Platform.isAndroid
+        ? GestureDetector(
+            onTap: (_mode == PickerMode.Album)
+                ? () {
+                    Navigator.of(context, rootNavigator: true).push<void>(
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, __) {
+                          return Scaffold(
+                            appBar: AppBar(
+                              title:
+                                  _buildAlbumSelectButton(context, isPop: true),
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.background,
+                              centerTitle: true,
+                            ),
+                            body: Material(
+                              // color: Colors.black,
+                              child: SafeArea(
+                                child: _buildAlbumList(_albums, context, (val) {
+                                  Navigator.of(context).pop();
+                                  setState(() {
+                                    _currentAlbum = val;
+                                  });
+                                  _currentAlbumKey.currentState
+                                      ?.updateStateFromExternal(
+                                          album: _currentAlbum);
+                                }),
+                              ),
+                            ),
+                          );
+                        },
+                        fullscreenDialog: true,
                       ),
                     );
-                  },
-                  fullscreenDialog: true,
-                ),
-              );
-            }
-          : null,
-      child: _buildAlbumSelectButton(
-        context,
-        isCameraMode: _mode == PickerMode.Camera,
-      ),
-    );
+                  }
+                : null,
+            child: _buildAlbumSelectButton(
+              context,
+              isCameraMode: _mode == PickerMode.Camera,
+            ),
+          )
+        : SizedBox();
   }
 
   /// Function used to select the images and close the image picker.
@@ -874,7 +875,7 @@ class _ImagePickerState extends State<ImagePicker>
       case DoneButtonStyle.outlinedButton:
         return Padding(
             padding: const EdgeInsets.all(8),
-            child: OutlinedButton(
+            child: ElevatedButton(
               onPressed: (_selectedImages.isNotEmpty)
                   ? () async {
                       // var searchProvider = await Provider.of<SearchProvider>(
@@ -892,13 +893,13 @@ class _ImagePickerState extends State<ImagePicker>
                       // );
                     }
                   : null,
-              style: ButtonStyle(
-                elevation: MaterialStateProperty.all(5),
-                // backgroundColor: MaterialStateProperty.all(
-                //     _selectedImages.isNotEmpty ? buttonColor : Colors.grey),
-                // shape: MaterialStateProperty.all(RoundedRectangleBorder(
-                //     borderRadius: BorderRadius.circular(10))),
-              ),
+              // style: ButtonStyle(
+              //   // elevation: MaterialStateProperty.all(5),
+              //   backgroundColor: MaterialStateProperty.all(
+              //       _selectedImages.isNotEmpty ? buttonColor : Colors.grey),
+              //   shape: MaterialStateProperty.all(RoundedRectangleBorder(
+              //       borderRadius: BorderRadius.circular(10))),
+              // ),
               child: Row(children: [
                 const Text('Search'),
                 if (_isOutputCreating)
@@ -1016,10 +1017,6 @@ class _ImagePickerState extends State<ImagePicker>
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            //! TODO: Change the selected image edit
-            _mode == 0
-                ? _buildReorderableSelectedImageList(context)
-                : const SizedBox(),
             _buildCameraControls(context),
           ],
         ),
@@ -1033,7 +1030,7 @@ class _ImagePickerState extends State<ImagePicker>
       {bool isPop = false, bool isCameraMode = false}) {
     if (isCameraMode) {
       return Text(
-        'CAMERA',
+        'CAMERAs',
         style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.bold,
@@ -1341,163 +1338,163 @@ class _ImagePickerState extends State<ImagePicker>
   }
 
   /// Build reorderable selected image list.
-  Widget _buildReorderableSelectedImageList(BuildContext context) {
-    LogUtils.log("[_buildReorderableSelectedImageList] start");
+  // Widget _buildReorderableSelectedImageList(BuildContext context) {
+  //   LogUtils.log("[_buildReorderableSelectedImageList] start");
 
-    Widget makeThumbnailImage(String? path) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Image.file(
-          File(path!),
-          fit: BoxFit.cover,
-          width: _configs.thumbWidth.toDouble(),
-          height: _configs.thumbHeight.toDouble(),
-        ),
-      );
-    }
+  // Widget makeThumbnailImage(String? path) {
+  //   return ClipRRect(
+  //     borderRadius: BorderRadius.circular(10),
+  //     child: Image.file(
+  //       File(path!),
+  //       fit: BoxFit.cover,
+  //       width: _configs.thumbWidth.toDouble(),
+  //       height: _configs.thumbHeight.toDouble(),
+  //     ),
+  //   );
+  // }
 
-    /// Remove image in the list at index.
-    void _removeImage(final int index) {
-      setState(() {
-        _selectedImages.removeAt(index);
-      });
-      _currentAlbumKey.currentState
-          ?.updateStateFromExternal(selectedImages: _selectedImages);
-    }
+  /// Remove image in the list at index.
+  // void _removeImage(final int index) {
+  //   setState(() {
+  //     _selectedImages.removeAt(index);
+  //   });
+  //   _currentAlbumKey.currentState
+  //       ?.updateStateFromExternal(selectedImages: _selectedImages);
+  // }
 
-    /// Make an image thumbnail widget.
-    Widget makeThumbnailWidget(String? path, int index) {
-      if (!_configs.showDeleteButtonOnSelectedList) {
-        return makeThumbnailImage(path);
-      }
-      return Stack(fit: StackFit.passthrough, children: [
-        makeThumbnailImage(path),
-        Positioned(
-          top: 2,
-          right: 2,
-          child: GestureDetector(
-              child: Container(
-                margin: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: Colors.grey,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                height: 24,
-                width: 24,
-                child: const Icon(
-                  Icons.close,
-                  size: 16,
-                  color: Colors.white,
-                ),
-              ),
-              onTap: () {
-                if (_configs.showRemoveImageAlert) {
-                  showDialog<void>(
-                    context: context,
-                    builder: (BuildContext context) {
-                      // return object of type Dialog
-                      return AlertDialog(
-                        title: Text(_configs.textConfirm),
-                        content: Text(_configs.textConfirmDelete),
-                        actions: <Widget>[
-                          TextButton(
-                            child: Text(_configs.textNo),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                          TextButton(
-                            child: Text(_configs.textYes),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _removeImage(index);
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                } else {
-                  _removeImage(index);
-                }
-              }),
-        )
-      ]);
-    }
+  /// Make an image thumbnail widget.
+  // Widget makeThumbnailWidget(String? path, int index) {
+  //   if (!_configs.showDeleteButtonOnSelectedList) {
+  //     return makeThumbnailImage(path);
+  //   }
+  //   return Stack(fit: StackFit.passthrough, children: [
+  //     makeThumbnailImage(path),
+  //     Positioned(
+  //       top: 2,
+  //       right: 2,
+  //       child: GestureDetector(
+  //           child: Container(
+  //             margin: const EdgeInsets.all(2),
+  //             decoration: const BoxDecoration(
+  //               color: Colors.grey,
+  //               shape: BoxShape.circle,
+  //             ),
+  //             alignment: Alignment.center,
+  //             height: 24,
+  //             width: 24,
+  //             child: const Icon(
+  //               Icons.close,
+  //               size: 16,
+  //               color: Colors.white,
+  //             ),
+  //           ),
+  //           onTap: () {
+  //             if (_configs.showRemoveImageAlert) {
+  //               showDialog<void>(
+  //                 context: context,
+  //                 builder: (BuildContext context) {
+  //                   // return object of type Dialog
+  //                   return AlertDialog(
+  //                     title: Text(_configs.textConfirm),
+  //                     content: Text(_configs.textConfirmDelete),
+  //                     actions: <Widget>[
+  //                       TextButton(
+  //                         child: Text(_configs.textNo),
+  //                         onPressed: () {
+  //                           Navigator.of(context).pop();
+  //                         },
+  //                       ),
+  //                       TextButton(
+  //                         child: Text(_configs.textYes),
+  //                         onPressed: () {
+  //                           Navigator.of(context).pop();
+  //                           _removeImage(index);
+  //                         },
+  //                       ),
+  //                     ],
+  //                   );
+  //                 },
+  //               );
+  //             } else {
+  //               _removeImage(index);
+  //             }
+  //           }),
+  //     )
+  //   ]);
+  // }
 
-    return Container(
-        alignment: Alignment.bottomRight,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        height: (_configs.thumbHeight + 8).toDouble(),
-        child: Theme(
-          data: ThemeData(
-              canvasColor: Colors.transparent, shadowColor: Colors.red),
-          child: ReorderableListView(
-              scrollController: _scrollController,
-              scrollDirection: Axis.horizontal,
-              shrinkWrap: true,
-              onReorder: _reorderSelectedImageList,
-              children: <Widget>[
-                for (var i = 0; i < widget.maxCount; i++)
-                  if (_selectedImages.length > i)
-                    Container(
-                        key: ValueKey(i.toString()),
-                        margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey,
-                          border: Border.all(color: Colors.white, width: 3),
-                          borderRadius:
-                              const BorderRadius.all(Radius.circular(10)),
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).push<void>(
-                                PageRouteBuilder<dynamic>(
-                                    pageBuilder: (context, animation, __) {
-                              _configs.imagePreProcessingBeforeEditingEnabled =
-                                  !_configs.imagePreProcessingEnabled;
+  // return Container(
+  //     alignment: Alignment.bottomRight,
+  //     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+  //     height: (_configs.thumbHeight + 8).toDouble(),
+  //     child: Theme(
+  //       data: ThemeData(
+  //           canvasColor: Colors.transparent, shadowColor: Colors.red),
+  //       child: ReorderableListView(
+  //           scrollController: _scrollController,
+  //           scrollDirection: Axis.horizontal,
+  //           shrinkWrap: true,
+  //           onReorder: _reorderSelectedImageList,
+  //           children: <Widget>[
+  //             for (var i = 0; i < widget.maxCount; i++)
+  //               if (_selectedImages.length > i)
+  //                 Container(
+  //                     key: ValueKey(i.toString()),
+  //                     margin: const EdgeInsets.all(4),
+  //                     decoration: BoxDecoration(
+  //                       color: Colors.grey,
+  //                       border: Border.all(color: Colors.white, width: 3),
+  //                       borderRadius:
+  //                           const BorderRadius.all(Radius.circular(10)),
+  //                     ),
+  //                     child: GestureDetector(
+  //                       onTap: () {
+  //                         Navigator.of(context).push<void>(
+  //                             PageRouteBuilder<dynamic>(
+  //                                 pageBuilder: (context, animation, __) {
+  //                           _configs.imagePreProcessingBeforeEditingEnabled =
+  //                               !_configs.imagePreProcessingEnabled;
 
-                              return ImageViewer(
-                                  title: _configs.textPreviewTitle,
-                                  images: _selectedImages,
-                                  initialIndex: i,
-                                  configs: _configs,
-                                  onChanged: (dynamic value) {
-                                    if (value is List<ImageObject>) {
-                                      setState(() {
-                                        _selectedImages = value;
-                                      });
-                                      _currentAlbumKey.currentState
-                                          ?.updateStateFromExternal(
-                                              selectedImages: _selectedImages);
-                                    }
-                                  });
-                            }));
-                          },
-                          child: makeThumbnailWidget(
-                              _selectedImages[i].modifiedPath, i),
-                        ))
-                  else
-                    Container(
-                        key: ValueKey(i.toString()),
-                        width: _configs.thumbWidth.toDouble(),
-                        height: _configs.thumbHeight.toDouble(),
-                        // margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Color.fromARGB(255, 231, 231, 231),
-                          border: Border.all(
-                            // color: (i == _selectedImages.length)
-                            //     ? Colors.blue
-                            //     : Colors.white,
-                            width: 1,
-                          ),
-                          borderRadius:
-                              const BorderRadius.all(Radius.circular(6.0)),
-                        ))
-              ]),
-        ));
-  }
+  //                           return ImageViewer(
+  //                               title: _configs.textPreviewTitle,
+  //                               images: _selectedImages,
+  //                               initialIndex: i,
+  //                               configs: _configs,
+  //                               onChanged: (dynamic value) {
+  //                                 if (value is List<ImageObject>) {
+  //                                   setState(() {
+  //                                     _selectedImages = value;
+  //                                   });
+  //                                   _currentAlbumKey.currentState
+  //                                       ?.updateStateFromExternal(
+  //                                           selectedImages: _selectedImages);
+  //                                 }
+  //                               });
+  //                         }));
+  //                       },
+  //                       child: makeThumbnailWidget(
+  //                           _selectedImages[i].modifiedPath, i),
+  //                     ))
+  //               else
+  //                 Container(
+  //                     key: ValueKey(i.toString()),
+  //                     width: _configs.thumbWidth.toDouble(),
+  //                     height: _configs.thumbHeight.toDouble(),
+  //                     // margin: const EdgeInsets.all(4),
+  //                     decoration: BoxDecoration(
+  //                       color: Color.fromARGB(255, 231, 231, 231),
+  //                       border: Border.all(
+  //                         // color: (i == _selectedImages.length)
+  //                         //     ? Colors.blue
+  //                         //     : Colors.white,
+  //                         width: 1,
+  //                       ),
+  //                       borderRadius:
+  //                           const BorderRadius.all(Radius.circular(6.0)),
+  //                     ))
+  //           ]),
+  //     ));
+  // }
 
   /// Return used IconData for corresponding FlashMode.
   ///
@@ -1549,91 +1546,27 @@ class _ImagePickerState extends State<ImagePicker>
             child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // GestureDetector(
-                  //   onTapDown: !isMaxCount
-                  //       ? (td) {
-                  //           setState(() {
-                  //             _isCapturing = true;
-                  //           });
-                  //         }
-                  //       : null,
-                  //   onTapUp: !isMaxCount
-                  //       ? (td) {
-                  //           setState(() {
-                  //             _isCapturing = false;
-                  //           });
-                  //         }
-                  //       : null,
-                  //   onTap: (!isMaxCount &&
-                  //           !(_controller?.value.isTakingPicture ?? true))
-                  //       ? () async {
-                  //           LogUtils.log(
-                  //               "[_buildCameraControls] capture pressed");
-
-                  //           // Ensure that the camera is initialized.
-                  //           await _initializeControllerFuture;
-
-                  //           if (!(_controller?.value.isTakingPicture ?? true)) {
-                  //             try {
-                  //               // Scroll to end of list.
-                  //               await _scrollController.animateTo(
-                  //                 ((_selectedImages.length - 1) *
-                  //                         _configs.thumbWidth)
-                  //                     .toDouble(),
-                  //                 duration: const Duration(seconds: 1),
-                  //                 curve: Curves.fastOutSlowIn,
-                  //               );
-
-                  //               // Take new picture.
-                  //               final file = await _controller!.takePicture();
-                  //               LogUtils.log(
-                  //                   "[_buildCameraControls] takePicture done");
-
-                  //               Map<String, dynamic>? croppingParams;
-                  //               if (!_isFullscreenImage) {
-                  //                 croppingParams = <String, dynamic>{};
-                  //                 if (mounted) {
-                  //                   final size = MediaQuery.of(context).size;
-                  //                   croppingParams["originX"] = 0;
-                  //                   croppingParams["originY"] = 0;
-                  //                   croppingParams["widthPercent"] = 1.0;
-                  //                   if (_configs.cameraPickerModeEnabled &&
-                  //                       _configs.albumPickerModeEnabled) {
-                  //                     croppingParams["heightPercent"] =
-                  //                         (size.height -
-                  //                                 kBottomControlPanelHeight) /
-                  //                             size.height;
-                  //                   } else {
-                  //                     croppingParams["heightPercent"] =
-                  //                         (size.height -
-                  //                                 kBottomControlPanelHeight +
-                  //                                 32) /
-                  //                             size.height;
-                  //                   }
-                  //                 }
-                  //               }
-                  //               final capturedFile = await _imagePreProcessing(
-                  //                   file.path,
-                  //                   croppingParams: croppingParams);
-
-                  //               setState(() {
-                  //                 LogUtils.log(
-                  //                     "[_buildCameraControls] update image "
-                  //                     "list after capturing");
-                  //                 _selectedImages.add(ImageObject(
-                  //                     originalPath: capturedFile.path,
-                  //                     modifiedPath: capturedFile.path));
-                  //               });
-                  //             } on CameraException catch (e) {
-                  //               LogUtils.log('${e.description}');
-                  //             }
-                  //           }
-                  //         }
-                  //       : null,
-                  //   child: Icon(Icons.camera,
-                  //       size: (64 + (_isCapturing ? (-10) : 0)).toDouble(),
-                  //       color: !isMaxCount ? Colors.white : Colors.grey),
-                  // ),
+                  if (_configs.showFlashMode)
+                    GestureDetector(
+                      child: Icon(_flashModeIcon(_flashMode),
+                          size: 32, color: Colors.white),
+                      onTap: () async {
+                        // Ensure that the camera is initialized.
+                        await _initializeControllerFuture;
+                        // Cycle to next flash mode.
+                        _cycleFlashMode();
+                        // Update camera to new flash mode.
+                        await _controller!
+                            .setFlashMode(_flashMode)
+                            .then((value) => setState(() {}));
+                      },
+                    )
+                  else
+                    // We use a transparent icon with no tap, to make
+                    // it take up same space as when it is there, to ensure
+                    // identical layout as when it is shown.
+                    Icon(_flashModeIcon(_flashMode),
+                        size: 32, color: Colors.transparent),
                 ]),
           )
         : const SizedBox();
