@@ -1133,7 +1133,7 @@ class _ImagePickerState extends State<ImagePicker>
                           color: Colors.grey,
                           border: Border.all(color: Colors.white, width: 3),
                           borderRadius:
-                              const BorderRadius.all(Radius.circular(10)),
+                              const BorderRadius.all(Radius.circular(5)),
                         ),
                         child: GestureDetector(
                           onTap: () {
