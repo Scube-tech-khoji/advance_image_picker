@@ -901,7 +901,7 @@ class _ImagePickerState extends State<ImagePicker>
               //       borderRadius: BorderRadius.circular(10))),
               // ),
               child: Row(children: [
-                const Text('Search'),
+                const Text('Next'),
                 if (_isOutputCreating)
                   const Padding(
                     padding: EdgeInsets.all(4),
@@ -1015,8 +1015,9 @@ class _ImagePickerState extends State<ImagePicker>
                 style: const TextStyle(color: Colors.grey, fontSize: 14))
         ],
         Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            _buildReorderableSelectedImageList(context),
             _buildCameraControls(context),
           ],
         ),
@@ -1025,12 +1026,173 @@ class _ImagePickerState extends State<ImagePicker>
     );
   }
 
+  Widget _buildReorderableSelectedImageList(BuildContext context) {
+    LogUtils.log("[_buildReorderableSelectedImageList] start");
+
+    Widget makeThumbnailImage(String? path) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.file(
+          File(path!),
+          fit: BoxFit.cover,
+          width: _configs.thumbWidth.toDouble(),
+          height: _configs.thumbHeight.toDouble(),
+        ),
+      );
+    }
+
+    /// Remove image in the list at index.
+    void _removeImage(final int index) {
+      setState(() {
+        _selectedImages.removeAt(index);
+      });
+      _currentAlbumKey.currentState
+          ?.updateStateFromExternal(selectedImages: _selectedImages);
+    }
+
+    // / Make an image thumbnail widget.
+    Widget makeThumbnailWidget(String? path, int index) {
+      if (!_configs.showDeleteButtonOnSelectedList) {
+        return makeThumbnailImage(path);
+      }
+      return Stack(fit: StackFit.passthrough, children: [
+        makeThumbnailImage(path),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: GestureDetector(
+              child: Container(
+                margin: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.grey,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                height: 24,
+                width: 24,
+                child: const Icon(
+                  Icons.close,
+                  size: 16,
+                  color: Colors.white,
+                ),
+              ),
+              onTap: () {
+                if (_configs.showRemoveImageAlert) {
+                  showDialog<void>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      // return object of type Dialog
+                      return AlertDialog(
+                        title: Text(_configs.textConfirm),
+                        content: Text(_configs.textConfirmDelete),
+                        actions: <Widget>[
+                          TextButton(
+                            child: Text(_configs.textNo),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                          TextButton(
+                            child: Text(_configs.textYes),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _removeImage(index);
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                } else {
+                  _removeImage(index);
+                }
+              }),
+        )
+      ]);
+    }
+
+    // For Cropping
+    return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        height: (_configs.thumbHeight + 8).toDouble(),
+        child: Theme(
+          data: ThemeData(
+              canvasColor: Colors.transparent, shadowColor: Colors.red),
+          child: ReorderableListView(
+              scrollController: _scrollController,
+              scrollDirection: Axis.horizontal,
+              shrinkWrap: true,
+              onReorder: _reorderSelectedImageList,
+              children: <Widget>[
+                for (var i = 0; i < widget.maxCount; i++)
+                  if (_selectedImages.length > i)
+                    Container(
+                        key: ValueKey(i.toString()),
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey,
+                          border: Border.all(color: Colors.white, width: 3),
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(5)),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            // Navigator.of(context).push<void>(
+                            //   PageRouteBuilder<dynamic>(
+                            //     pageBuilder: (context, animation, __) {
+                            //       _configs.imagePreProcessingBeforeEditingEnabled =
+                            //           !_configs.imagePreProcessingEnabled;
+
+                            //       return ImageViewer(
+                            //         title: _configs.textPreviewTitle,
+                            //         images: _selectedImages,
+                            //         initialIndex: i,
+                            //         configs: _configs,
+                            //         onChanged: (dynamic value) {
+                            //           if (value is List<ImageObject>) {
+                            //             setState(() {
+                            //               _selectedImages = value;
+                            //             });
+                            //             _currentAlbumKey.currentState
+                            //                 ?.updateStateFromExternal(
+                            //                     selectedImages:
+                            //                         _selectedImages);
+                            //           }
+                            //         },
+                            //       );
+                            //     },
+                            //   ),
+                            // );
+                          },
+                          child: makeThumbnailWidget(
+                              _selectedImages[i].modifiedPath, i),
+                        ))
+                  else
+                    Container(
+                        key: ValueKey(i.toString()),
+                        width: _configs.thumbWidth.toDouble(),
+                        height: _configs.thumbHeight.toDouble(),
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey,
+                          border: Border.all(
+                              color: (i == _selectedImages.length)
+                                  ? Colors.blue
+                                  : Colors.white,
+                              width: 3),
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(10)),
+                        ))
+              ]),
+        ));
+  }
+
   /// Build album select button.
   Widget _buildAlbumSelectButton(BuildContext context,
       {bool isPop = false, bool isCameraMode = false}) {
     if (isCameraMode) {
       return Text(
-        'CAMERAs',
+        'CAMERA',
         style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.bold,
